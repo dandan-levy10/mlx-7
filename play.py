@@ -1,18 +1,6 @@
 import json
 import os
 
-# from transformers import CLIPTokenizer
-
-# # Load CLIP tokenizer
-# tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-
-# # Tokenize "(1/2 cups)"
-# tokens = tokenizer("(1/2 cups)", add_special_tokens=False)
-
-# # Count number of tokens
-# print(f"Number of tokens: {len(tokens.input_ids)}")
-
-
 # -----------------------
 
 # with open("recipe-1m/layer2.json", "r") as f:
