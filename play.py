@@ -1,3 +1,5 @@
+import json
+
 # from transformers import CLIPTokenizer
 
 # # Load CLIP tokenizer
@@ -10,18 +12,17 @@
 # print(f"Number of tokens: {len(tokens.input_ids)}")
 
 
-import json
-
-# Load our filtered dataset
-with open("processed-data/layer1_train_subset.json", "r") as f:
-    train_data = json.load(f)
-
-# Count how many of these recipes have image mappings in layer2.json
 with open("recipe-1m/layer2.json", "r") as f:
     image_data = json.load(f)
 
-image_recipe_ids = {entry["id"] for entry in image_data}
+required_images = []
+for entry in image_data:
+    if "images" in entry and entry["images"]:
+        img = entry["images"][0]  # Take only the first image
+        img_path = f"val/{img['id'][:1]}/{img['id'][1:2]}/{img['id'][2:3]}/{img['id'][3:4]}/{img['id']}.jpg"
+        required_images.append(img_path)
 
-expected_images = sum(1 for recipe in train_data if recipe["id"] in image_recipe_ids)
+print("🔍 First 10 expected image paths:")
+for path in required_images[:10]:
+    print(path)
 
-print(f"Expected number of images for train dataset: {expected_images}")

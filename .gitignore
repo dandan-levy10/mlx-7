@@ -28,3 +28,6 @@ checkpoints/
 
 # Ignore VS Code settings (if applicable)
 .vscode/
+
+# Ignore database .db files
+*.db
