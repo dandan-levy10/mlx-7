@@ -84,7 +84,7 @@ class RecipeDataset(Dataset):
     def clean_ingredient_text(self, text):
         # Remove numbers, fractions, and measurement words
         text = re.sub(r"\d+[/\d]*\s*", "", text)  # Remove numbers & fractions
-        text = re.sub(r"\b(teaspoons?|tablespoons?|cups?|ounces?|cloves?|slices?|strips?|Tbsp|Tsp|ml|g|lbs?|cut|in|thirds|half|halves|minced|substitute|sliced|into|inch|-inch|whole|sheets|thawed|weight|divided|chopped|diced|peeled|crushed|ground|fresh|frozen|package|container|can|jar|drained|packed|rinsed|shredded|crumbled|leaves|sprigs|stalks|heads|fillets|loaves)\b", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\b(teaspoons?|tablespoons?|cups?|ounces?|cubes?|cloves?|slices?|strips?|Tbsp|Tsp|ml|g|lbs?|cut|in|thirds|half|halves|minced|substitute|sliced|into|inch|-inch|whole|sheets|thawed|weight|divided|chopped|diced|peeled|crushed|fresh|frozen|package|container|can|jar|drained|packed|rinsed|shredded|crumbled|leaves|sprigs|stalks|heads|fillets|loaves|pounds?|cans?|to|taste|fluid|containers?|or|pieces?|large|medium|small|trimmed|plus|and|quartered|wise|length|thinly|crosswise|grams?|dash|each)\b", "", text, flags=re.IGNORECASE)
         text = re.sub(r"\([^)]*\)", "", text)  # Remove anything in parentheses
 
         # Remove hyphens and commas
