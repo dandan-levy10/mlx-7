@@ -78,4 +78,4 @@ def analyze_random_recipes(json_file, num_samples=10):
         print("-" * 80)
 
 # Run the function on the train dataset
-analyze_random_recipes("processed-data/layer1_train_subset.json")
+analyze_random_recipes("processed-data/layer1_train_subset.json", num_samples=10000)
