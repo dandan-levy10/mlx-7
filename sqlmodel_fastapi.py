@@ -25,6 +25,14 @@ class PersonCreate(SQLModel): # Request model- note no table=True
     gender: str
     age: int
 
+class PersonUpdate(SQLModel): # Request model- note no table=True
+
+    ssn: int 
+    firstname: Optional[str] = None
+    lastname: Optional[str] = None
+    gender: Optional[str] = None
+    age: Optional[int] = None
+
 class Thing(SQLModel, table=True):
 
     tid: int = Field(primary_key=True, index=True)
@@ -97,3 +105,28 @@ def get_people(session: Session = Depends(get_session)):
     results = session.exec(statement).all()
     return results
 
+@app.delete("/people/", response_model=list[Person])
+def delete_person(ssn: int, session: Session = Depends(get_session)):
+    statement = select(Person).where(Person.ssn == ssn)
+    result = session.exec(statement).first()
+    
+    if result:
+        session.delete(result)
+        session.commit()
+        return session.exec(select(Person)).all()
+    else:
+        raise HTTPException(status_code=400, detail="Person does not exist")
+    
+@app.put("/people/", response_model= list[Person])
+def update_person(update_person: PersonUpdate, session: Session = Depends(get_session)):
+    statement = select(Person).where(Person.ssn == update_person.ssn)
+    person = session.exec(statement).one_or_none()
+    
+    if person:
+        for key, value in person.model_dump(exclude_unset=True):
+            setattr(person, key, value)
+        session.commit()
+        session.refresh()
+        return session.exec(select(Person)).all()
+    else:
+        raise HTTPException(status_code=400, detail="Person does not exist")
