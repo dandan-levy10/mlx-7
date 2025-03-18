@@ -1,0 +1,30 @@
+# Ignore dataset folders
+processed-data/
+recipe-1m/
+
+# Ignore tar archives and extracted images
+*.tar
+*.tar.gz
+*.zip
+*.jpg
+*.png
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+.DS_Store
+
+# Ignore Python cache & compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore model artifacts & checkpoints
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+
+# Ignore VS Code settings (if applicable)
+.vscode/
