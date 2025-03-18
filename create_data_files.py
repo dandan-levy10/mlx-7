@@ -86,8 +86,9 @@ def create_test_train_dataset(train_samples, test_samples, seed=42):
     print(f"🔍 Final test dataset size: {len(test_recipes)}")
 
 
+
 # def extract_required_images(tar_path, image_output_dir, train_json, test_json, layer2_json):
-#     """Extracts only the required images for train/test datasets from the .tar archive with corrected file paths."""
+#     """Extracts only the required images from the .tar archive and logs extraction failures."""
 
 #     def load_recipe_ids(json_file):
 #         with open(json_file, "r") as f:
@@ -109,27 +110,55 @@ def create_test_train_dataset(train_samples, test_samples, seed=42):
 #         for entry in image_data:
 #             recipe_id = entry["id"]
 #             if recipe_id in train_ids or recipe_id in test_ids:
-#                 for img in entry["images"]:
-#                     # **Updated path format to match the .tar file structure**
+#                 if entry["images"]: # Extract only the first image
+#                     img = entry["images"][0]
 #                     img_path = f"val/{img['id'][:1]}/{img['id'][1:2]}/{img['id'][2:3]}/{img['id'][3:4]}/{img['id']}"
+#                     print(f"🎯 Recipe ID: {recipe_id}")
+#                     print(f"🔍 Expected Image ID: {img['id']}")
+#                     print(f"📌 Expected Extraction Path: {img_path}")
 #                     required_images[img_path] = "train" if recipe_id in train_ids else "test"
 
 #     print(f"✅ Found {len(required_images)} images to extract.")
 
-#     # Extract only missing images
+#     missing_files = []
+#     extracted_count = 0
+
 #     with tarfile.open(tar_path, "r") as tar:
 #         for member in tar.getmembers():
 #             if member.name in required_images:
 #                 target_dir = train_output_dir if required_images[member.name] == "train" else test_output_dir
 #                 output_path = os.path.join(target_dir, os.path.basename(member.name))
 
-#                 # **Print extracted image paths for debugging**
+#                 # Debugging: Print each image being extracted
 #                 print(f"📂 Extracting: {member.name} to {target_dir}")
 
-#                 if not os.path.exists(output_path):
-#                     tar.extract(member, target_dir)
+#                 print(f"📂 Searching for: {member.name}")  # Show what we're searching in the .tar file
+#                 print(f"📌 Expected target directory: {target_dir}")
+#                 print(f"📌 Expected output filename: {output_path}")
 
-#     print("✅ Image extraction complete.")
+#                 try:
+#                     if not os.path.exists(output_path):
+#                         try:
+#                             tar.extract(member, target_dir)
+#                             extracted_count += 1
+#                             print(f"✅ Extracted: {member.name}")
+#                         except Exception as e:
+#                             print(f"❌ Error extracting {member.name}: {e}")
+#                     else:
+#                         print(f"⚠️ Skipped (already exists): {output_path}")
+#                 except Exception as e:
+#                     print(f"❌ Error extracting {member.name}: {e}")
+#                     missing_files.append(member.name)
+
+#     print(f"✅ Successfully extracted {extracted_count} images.")
+#     print(f"❌ {len(missing_files)} images failed to extract. Check missing_images.log.")
+
+#     # Save missing image paths for debugging
+#     with open("missing_images.log", "w") as f:
+#         for missing in missing_files:
+#             f.write(f"{missing}\n")
+
+#     print("✅ Image extraction process complete.")
 
 
 def extract_required_images(tar_path, image_output_dir, train_json, test_json, layer2_json):
@@ -155,10 +184,15 @@ def extract_required_images(tar_path, image_output_dir, train_json, test_json, l
         for entry in image_data:
             recipe_id = entry["id"]
             if recipe_id in train_ids or recipe_id in test_ids:
-                if entry["images"]: # Extract only the first image
+                if entry["images"]:  # Extract only the first image
                     img = entry["images"][0]
                     img_path = f"val/{img['id'][:1]}/{img['id'][1:2]}/{img['id'][2:3]}/{img['id'][3:4]}/{img['id']}"
                     required_images[img_path] = "train" if recipe_id in train_ids else "test"
+
+                    # Debugging: Print out the expected extraction path
+                    print(f"🎯 Recipe ID: {recipe_id}")
+                    print(f"🔍 Expected Image ID: {img['id']}")
+                    print(f"📌 Expected Extraction Path: {img_path}")
 
     print(f"✅ Found {len(required_images)} images to extract.")
 
@@ -171,15 +205,17 @@ def extract_required_images(tar_path, image_output_dir, train_json, test_json, l
                 target_dir = train_output_dir if required_images[member.name] == "train" else test_output_dir
                 output_path = os.path.join(target_dir, os.path.basename(member.name))
 
-                # Debugging: Print each image being extracted
-                print(f"📂 Extracting: {member.name} to {target_dir}")
+                # Debugging: Print each file before extraction
+                print(f"📂 Searching for: {member.name}")
+                print(f"📌 Expected target directory: {target_dir}")
+                print(f"📌 Expected output filename: {output_path}")
 
                 try:
                     if not os.path.exists(output_path):
                         try:
                             tar.extract(member, target_dir)
                             extracted_count += 1
-                            print(f"✅ Extracted: {member.name}")
+                            print(f"✅ Extracted: {member.name} → {output_path}")
                         except Exception as e:
                             print(f"❌ Error extracting {member.name}: {e}")
                     else:
@@ -197,7 +233,6 @@ def extract_required_images(tar_path, image_output_dir, train_json, test_json, l
             f.write(f"{missing}\n")
 
     print("✅ Image extraction process complete.")
-
 
 
 if __name__ == "__main__":
