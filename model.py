@@ -50,49 +50,58 @@ class ThreeTowerModel(nn.Module):
         )
 
     def forward(self, query, pos_text, pos_image, neg_texts, neg_images):
-        
-        # Preprocess query + positive inputs
-        query_tokens = self.clip_processor(text=query, return_tensors="pt", padding=True, truncation=True)
-        pos_text_tokens = self.clip_processor(text=pos_text, return_tensors="pt", padding=True, truncation=True)
-        pos_image_tensor = self.clip_processor(images=pos_image, return_tensors="pt")["pixel_values"]
+        batch_size = len(query)
 
-        # Preprocess negative inputs
-        neg_text_tokens = torch.stack([self.clip_processor(text=neg, return_tensors="pt", padding=True, truncation=True) for neg in neg_texts])
-        neg_image_tensor = torch.stack([self.clip_processor(images=neg, return_tensors="pt")["pixel_values"] for neg in neg_images])
+        # Preprocess query + positive inputs
+        query_tokens = self.clip_processor(text=query, return_tensors="pt", padding=True, truncation=True) # [Batch_size, 77]
+        pos_text_tokens = self.clip_processor(text=pos_text, return_tensors="pt", padding=True, truncation=True) # [Batch_size, 77]
+        pos_image_tensor = self.clip_processor(images=pos_image, return_tensors="pt")["pixel_values"] # [Batch_size, 3, 224, 224]
 
         # Encode query + positive samples
-        query_embedding = self.clip_model.get_text_features(**query_tokens)
-        pos_text_embedding = self.clip_model.get_text_features(**pos_text_tokens)
-        pos_image_embedding = self.clip_model.get_image_features(pos_image_tensor)
+        query_embedding = self.clip_model.get_text_features(**query_tokens) # [Batch_size, 512]
+        pos_text_embedding = self.clip_model.get_text_features(**pos_text_tokens) # [Batch_size, 512]
+        pos_image_embedding = self.clip_model.get_image_features(pos_image_tensor) # [Batch_size, 512]
 
-        # Encode negative samples
-        neg_text_embedding = torch.stack([self.clip_model.get_text_features(neg) for neg in neg_text_tokens])
-        neg_image_embedding = torch.stack([self.clip_model.get_image_features(neg) for neg in neg_image_tensor])
+        # Tokenise & encode negative text samples
+        neg_text_tokens = self.clip_processor(text=neg_texts, return_tensors="pt", padding=True, truncation=True) # [Batch_size,neg_samples, 77]
+        neg_text_embedding = self.clip_model.get_text_features(**neg_text_tokens) # [Batch_size*neg_samples, 512]
+        neg_text_embedding = neg_text_embedding.view(batch_size, -1, 512) # Reshape to[Batch_size, neg_samples, 512]
+
+        # Tokenise & encode negative image samples
+        neg_image_tensor = self.clip_processor(images=neg_images, return_tensors="pt")["pixel_values"] # [Batch_size,neg_samples, 3, 224, 224]
+        neg_image_embedding = self.clip_model.get_image_features(neg_image_tensor) # [Batch_size, neg_samples, 512]
 
         # Pass through MLP towers
-        query_tower_output = self.query_tower(query_embedding)
-        pos_text_tower_output = self.text_tower(pos_text_embedding)
-        pos_image_tower_output = self.image_tower(pos_image_embedding)
+        query_embeddings = self.query_tower(query_embedding)  # [Batch_size, hidden_dim]
+        pos_text_embeddings = self.text_tower(pos_text_embedding)  # [Batch_size, hidden_dim]
+        pos_image_embeddings = self.image_tower(pos_image_embedding)  # [Batch_size, hidden_dim]
 
         # Process negative samples
-        neg_text_tower_output = torch.stack([self.text_tower(neg) for neg in neg_text_embedding])
-        neg_image_tower_output = torch.stack([self.image_tower(neg) for neg in neg_image_embedding])
+        neg_text_embeddings = self.text_tower(neg_text_embedding)  # [Batch_size, neg_samples, hidden_dim]
+        neg_image_embeddings = self.image_tower(neg_image_embedding)  # [Batch_size, neg_samples, hidden_dim]
 
         # Fuse text & image embeddings
-        pos_fusion_tower_output = self.fusion_tower(torch.cat([pos_text_tower_output, pos_image_tower_output], dim=1))
-        neg_fusion_tower_output = torch.stack([self.fusion_tower(torch.cat([neg_text_tower_output, neg_image_tower_output], dim=1)) for neg_text_tower_output, neg_image_tower_output in zip(neg_text_tower_output, neg_image_tower_output)])
+        pos_embeddings = self.fusion_tower(torch.cat([pos_text_embeddings, pos_image_embeddings], dim=1)) # [Batch_size, hidden_dim]
+        neg_embeddings = self.fusion_tower(torch.cat([neg_text_embeddings, neg_image_embeddings], dim=2)) # [Batch_size, num_negatives, hidden_dim]
 
-        return query_tower_output, pos_fusion_tower_output, neg_fusion_tower_output
+        return query_embeddings, pos_embeddings, neg_embeddings
         
 class NTXentLoss(nn.Module):
     def __init__(self, temperature=0.1):
         super().__init__()
         self.temperature = temperature
 
-    def forward(self, query_embedding, pos_fusion_tower_output, neg_fusion_tower_output):
-        batch_size = query_embedding.size(0)
+    def forward(self, query_embeddings, pos_embeddings, neg_embeddings):
+        batch_size = query_embeddings.size(0)
 
         # Compute similarities
+        pos_similarity = torch.nn.functional.cosine_similarity(query_embeddings, pos_embeddings) / self.temperature    # [Batch_size]
+        neg_similarity = torch.exp(torch.matmul(query_embeddings, neg_embeddings.transpose(1, 2)) / self.temperature)  # [Batch_size, num_negatives]
 
-        pos_similarity = torch.nn.functional.cosine_similarity(query_embedding.unsqueeze(1), pos_fusion_tower_output.unsqueeze(0), dim=2)
-        neg_similarity = torch.exp(torch.matmul(query_embedding, neg_fustion))
+        # Compute denominator: sum of all positive and negative similarities
+        denominator = pos_similarity + neg_similarity.sum(dim=1)
+
+        # Compute loss
+        loss = -torch.log(pos_similarity / denominator).mean()
+
+        return loss

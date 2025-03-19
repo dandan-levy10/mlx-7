@@ -51,7 +51,7 @@ import re
 
 
 class RecipeDataset(Dataset):
-    def __init__(self, json_file, image_root, layer2_json, transform=None):
+    def __init__(self, json_file, image_root, layer2_json, transform=None, num_negatives=3):
         """
         Args:
             json_file (str): Path to the JSON file containing recipes.
@@ -63,6 +63,7 @@ class RecipeDataset(Dataset):
             self.data = json.load(f)
 
         self.image_root = image_root
+        self.num_negatives = num_negatives
         self.transform = transform if transform else transforms.Compose([
             transforms.Resize((224, 224)),  # Resize to CLIP input size
             transforms.ToTensor(),
@@ -121,7 +122,40 @@ class RecipeDataset(Dataset):
         image = Image.open(image_path).convert("RGB")
         image = self.transform(image)
 
-        return text_input, image
+        negative_samples = []
+        used_indices = set()
+        while len(negative_samples) < self.num_negatives:
+            neg_idx = random.randint(0, len(self.data) - 1)
+            if neg_idx == idx or neg_idx in used_indices:
+                continue
+
+            neg_recipe = self.data[neg_idx]
+            neg_title = neg_recipe["title"]
+            neg_ingredients = ", ".join([ing["text"] for ing in neg_recipe["ingredients"]])
+            neg_text_input = f"{neg_title}. Ingredients: {neg_ingredients}."
+            neg_text_input = self.clean_ingredient_text(neg_text_input) # Clean text input
+
+            # Get the correct image ID
+            neg_image_id = self.recipe_to_image.get(neg_recipe["id"], None)
+
+            if neg_image_id is None:
+                print(f"❌ No image found for recipe ID: {neg_recipe['id']}")
+                continue
+
+            # Construct correct image path using image ID
+            neg_image_path = f"{self.image_root}/{neg_image_id[:1]}/{neg_image_id[1:2]}/{neg_image_id[2:3]}/{neg_image_id[3:4]}/{neg_image_id}"
+
+            if not os.path.exists(neg_image_path):
+                print(f"❌ Missing image: {neg_image_path}")  # Log missing images
+                continue
+
+            neg_image = Image.open(neg_image_path).convert("RGB")
+            neg_image = self.transform(neg_image)
+
+            negative_samples.append(neg_image)
+            used_indices.add(neg_idx)
+
+        return text_input, image, negative_samples # Returns a tuple of (text_input, image, negative_samples)
 
 
 # Example usage
@@ -149,13 +183,13 @@ def collate_fn(batch):
 # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32, collate_fn=collate_fn)
 
 
-# Print 5 random dataset samples
-for _ in range(4):
-    idx = random.randint(0, len(train_dataset) - 1)
-    sample = train_dataset[idx]
+# # Print 5 random dataset samples
+# for _ in range(4):
+#     idx = random.randint(0, len(train_dataset) - 1)
+#     sample = train_dataset[idx]
     
-    if sample:
-        text_sample, image_sample = sample
-        print(f"📜 Text: {text_sample}")
-        print(f"🖼️ Image Shape: {image_sample.shape}")
-        print("-" * 50)
+#     if sample:
+#         text_sample, image_sample = sample
+#         print(f"📜 Text: {text_sample}")
+#         print(f"🖼️ Image Shape: {image_sample.shape}")
+#         print("-" * 50)
