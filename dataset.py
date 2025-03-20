@@ -6,7 +6,7 @@ from PIL import Image
 import os
 import random
 import re
-
+from transformers import CLIPProcessor
 # class RecipeDataset(Dataset):
 #     def __init__(self, json_file, image_root, transform=None):
 #         """
@@ -69,6 +69,7 @@ class RecipeDataset(Dataset):
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.481, 0.457, 0.408], std=[0.268, 0.261, 0.275])
         ])
+        self.clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         # **Preload layer2.json into a dictionary for fast lookup**
         with open(layer2_json, "r") as f:
@@ -105,6 +106,10 @@ class RecipeDataset(Dataset):
         text_input = f"{title}. Ingredients: {ingredients}."
         text_input = self.clean_ingredient_text(text_input) # Clean text input
 
+        # Tokenise text input
+        query_tokens = self.clip_processor(text=text_input, return_tensors="pt")
+        pos_tokens = {k: v.clone() for k, v in query_tokens.items()}
+
         # Get the correct image ID
         image_id = self.recipe_to_image.get(recipe["id"], None)
 
@@ -119,12 +124,13 @@ class RecipeDataset(Dataset):
             print(f"❌ Missing image: {image_path}")  # Log missing images
             return None  # Skip this entry
 
-        image = Image.open(image_path).convert("RGB")
-        image = self.transform(image)
+        pos_image = Image.open(image_path).convert("RGB")
+        pos_image = self.transform(pos_image)
 
-        negative_samples = []
+        neg_images = []
+        neg_tokens = []
         used_indices = set()
-        while len(negative_samples) < self.num_negatives:
+        while len(neg_images) < self.num_negatives:
             neg_idx = random.randint(0, len(self.data) - 1)
             if neg_idx == idx or neg_idx in used_indices:
                 continue
@@ -134,6 +140,7 @@ class RecipeDataset(Dataset):
             neg_ingredients = ", ".join([ing["text"] for ing in neg_recipe["ingredients"]])
             neg_text_input = f"{neg_title}. Ingredients: {neg_ingredients}."
             neg_text_input = self.clean_ingredient_text(neg_text_input) # Clean text input
+            neg_text_tokens = self.clip_processor(text=neg_text_input, return_tensors="pt")
 
             # Get the correct image ID
             neg_image_id = self.recipe_to_image.get(neg_recipe["id"], None)
@@ -152,10 +159,11 @@ class RecipeDataset(Dataset):
             neg_image = Image.open(neg_image_path).convert("RGB")
             neg_image = self.transform(neg_image)
 
-            negative_samples.append(neg_image)
+            neg_images.append(neg_image)
+            neg_tokens.append(neg_text_tokens)
             used_indices.add(neg_idx)
 
-        return text_input, image, negative_samples # Returns a tuple of (text_input, image, negative_samples)
+        return query_tokens, pos_tokens, pos_image, neg_tokens, neg_images # Returns a tuple of (text_input, image, negative_samples)
 
 
 # Example usage
@@ -183,13 +191,19 @@ def collate_fn(batch):
 # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32, collate_fn=collate_fn)
 
 
-# # Print 5 random dataset samples
-# for _ in range(4):
-#     idx = random.randint(0, len(train_dataset) - 1)
-#     sample = train_dataset[idx]
+# Print 5 random dataset samples
+for _ in range(1):
+    idx = random.randint(0, len(train_dataset) - 1)
+    sample = train_dataset[idx]
     
-#     if sample:
-#         text_sample, image_sample = sample
-#         print(f"📜 Text: {text_sample}")
-#         print(f"🖼️ Image Shape: {image_sample.shape}")
-#         print("-" * 50)
+    if sample:
+        query_tokens, pos_tokens, pos_image, neg_tokens, neg_images = sample
+        print(f"📜 Text: {query_tokens['input_ids']}")
+        print(f"🖼️ Image Shape: {pos_image.shape}")
+        # print("image: ", pos_image)
+        print(f"🖼️ Negative Samples: {len(neg_images)}")
+        print("neg_images shape: ", neg_images[0].shape)
+        print("neg_tokens: ", neg_tokens[0]["input_ids"])
+        print("-" * 50)
+
+# print(f"✅ Total recipes mapped to images in old version: {len(train_dataset.recipe_to_image)}")
