@@ -67,7 +67,7 @@ class RecipeDataset(Dataset):
         self.transform = transform if transform else transforms.Compose([
             transforms.Resize((224, 224)),  # Resize to CLIP input size
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.481, 0.457, 0.408], std=[0.268, 0.261, 0.275])
+            # transforms.Normalize(mean=[0.481, 0.457, 0.408], std=[0.268, 0.261, 0.275]) # CLIP processor already normalises images
         ])
         self.clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
@@ -107,8 +107,8 @@ class RecipeDataset(Dataset):
         text_input = self.clean_ingredient_text(text_input) # Clean text input
 
         # Tokenise text input
-        query_tokens = self.clip_processor(text=text_input, return_tensors="pt")
-        pos_tokens = {k: v.clone() for k, v in query_tokens.items()}
+        query_tokens = self.clip_processor(text=text_input, return_tensors="pt", padding="max_length", truncation=True, max_length=77)["input_ids"]
+        pos_tokens = query_tokens.clone()
 
         # Get the correct image ID
         image_id = self.recipe_to_image.get(recipe["id"], None)
@@ -126,11 +126,11 @@ class RecipeDataset(Dataset):
 
         pos_image = Image.open(image_path).convert("RGB")
         pos_image = self.transform(pos_image)
-
-        neg_images = []
-        neg_tokens = []
+        pos_image = self.clip_processor(images=pos_image, return_tensors="pt", do_rescale=False)["pixel_values"].squeeze(0)
+        neg_images_list = []
+        neg_tokens_list = []
         used_indices = set()
-        while len(neg_images) < self.num_negatives:
+        while len(neg_images_list) < self.num_negatives:
             neg_idx = random.randint(0, len(self.data) - 1)
             if neg_idx == idx or neg_idx in used_indices:
                 continue
@@ -140,7 +140,7 @@ class RecipeDataset(Dataset):
             neg_ingredients = ", ".join([ing["text"] for ing in neg_recipe["ingredients"]])
             neg_text_input = f"{neg_title}. Ingredients: {neg_ingredients}."
             neg_text_input = self.clean_ingredient_text(neg_text_input) # Clean text input
-            neg_text_tokens = self.clip_processor(text=neg_text_input, return_tensors="pt")
+            neg_text_tokens = self.clip_processor(text=neg_text_input, return_tensors="pt", padding="max_length", truncation=True, max_length=77)["input_ids"]
 
             # Get the correct image ID
             neg_image_id = self.recipe_to_image.get(neg_recipe["id"], None)
@@ -158,10 +158,14 @@ class RecipeDataset(Dataset):
 
             neg_image = Image.open(neg_image_path).convert("RGB")
             neg_image = self.transform(neg_image)
+            neg_image = self.clip_processor(images=neg_image, return_tensors="pt", do_rescale=False)["pixel_values"].squeeze(0)
 
-            neg_images.append(neg_image)
-            neg_tokens.append(neg_text_tokens)
+            neg_images_list.append(neg_image)
+            neg_tokens_list.append(neg_text_tokens)
             used_indices.add(neg_idx)
+
+        neg_tokens = torch.stack(neg_tokens_list, dim=0)
+        neg_images = torch.stack(neg_images_list, dim=0)
 
         return query_tokens, pos_tokens, pos_image, neg_tokens, neg_images # Returns a tuple of (text_input, image, negative_samples)
 
@@ -184,26 +188,21 @@ test_dataset = RecipeDataset(
 # print(f"Sample Text: {text_sample}")
 # print(f"Image Shape: {image_sample.shape}")
 
-def collate_fn(batch):
-    batch = [b for b in batch if b is not None]  # ✅ Remove None values
-    return zip(*batch) if batch else ([], [])   # ✅ Prevents empty batch errors
+if __name__ == "__main__":
 
-# train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32, collate_fn=collate_fn)
+    # Print 5 random dataset samples
+    for _ in range(1):
+        idx = random.randint(0, len(train_dataset) - 1)
+        sample = train_dataset[idx]
+        
+        if sample:
+            query_tokens, pos_tokens, pos_image, neg_tokens, neg_images = sample
+            print(f"📜 Text: {query_tokens['input_ids']}")
+            print(f"🖼️ Image Shape: {pos_image.shape}")
+            # print("image: ", pos_image)
+            print(f"🖼️ Negative Samples: {len(neg_images)}")
+            print("neg_images shape: ", neg_images[0].shape)
+            print("neg_tokens: ", neg_tokens[0]["input_ids"])
+            print("-" * 50)
 
-
-# Print 5 random dataset samples
-for _ in range(1):
-    idx = random.randint(0, len(train_dataset) - 1)
-    sample = train_dataset[idx]
-    
-    if sample:
-        query_tokens, pos_tokens, pos_image, neg_tokens, neg_images = sample
-        print(f"📜 Text: {query_tokens['input_ids']}")
-        print(f"🖼️ Image Shape: {pos_image.shape}")
-        # print("image: ", pos_image)
-        print(f"🖼️ Negative Samples: {len(neg_images)}")
-        print("neg_images shape: ", neg_images[0].shape)
-        print("neg_tokens: ", neg_tokens[0]["input_ids"])
-        print("-" * 50)
-
-# print(f"✅ Total recipes mapped to images in old version: {len(train_dataset.recipe_to_image)}")
+    # print(f"✅ Total recipes mapped to images in old version: {len(train_dataset.recipe_to_image)}")

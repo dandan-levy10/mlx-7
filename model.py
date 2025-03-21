@@ -49,27 +49,27 @@ class ThreeTowerModel(nn.Module):
             nn.Linear(self.hidden_dim * 2, self.hidden_dim),
         )
 
-    def forward(self, query, pos_text, pos_image, neg_texts, neg_images):
-        batch_size = len(query)
+    def forward(self, query_tokens, pos_tokens, pos_image, neg_tokens, neg_images):
+        batch_size = len(query_tokens)
 
-        # Preprocess query + positive inputs
-        query_tokens = self.clip_processor(text=query, return_tensors="pt", padding=True, truncation=True) # [Batch_size, 77]
-        pos_text_tokens = self.clip_processor(text=pos_text, return_tensors="pt", padding=True, truncation=True) # [Batch_size, 77]
-        pos_image_tensor = self.clip_processor(images=pos_image, return_tensors="pt")["pixel_values"] # [Batch_size, 3, 224, 224]
+        # Preprocess positive image- not needed as this is already done in the dataset
+        # pos_image_tensor = self.clip_processor(images=pos_image, return_tensors="pt")["pixel_values"] # [Batch_size, 3, 224, 224]
 
         # Encode query + positive samples
-        query_embedding = self.clip_model.get_text_features(**query_tokens) # [Batch_size, 512]
-        pos_text_embedding = self.clip_model.get_text_features(**pos_text_tokens) # [Batch_size, 512]
-        pos_image_embedding = self.clip_model.get_image_features(pos_image_tensor) # [Batch_size, 512]
+        query_embedding = self.clip_model.get_text_features(input_ids=query_tokens) # [Batch_size, 512]
+        pos_text_embedding = self.clip_model.get_text_features(input_ids=pos_tokens) # [Batch_size, 512]
+        pos_image_embedding = self.clip_model.get_image_features(pixel_values=pos_image) # [Batch_size, 512]
 
         # Tokenise & encode negative text samples
-        neg_text_tokens = self.clip_processor(text=neg_texts, return_tensors="pt", padding=True, truncation=True) # [Batch_size,neg_samples, 77]
-        neg_text_embedding = self.clip_model.get_text_features(**neg_text_tokens) # [Batch_size*neg_samples, 512]
+        neg_tokens = neg_tokens.view(-1, 77) # [Batch_size*neg_samples, 77] --> CLIP encoder expects 2D input
+        neg_text_embedding = self.clip_model.get_text_features(input_ids=neg_tokens) # [Batch_size*neg_samples, 512]
         neg_text_embedding = neg_text_embedding.view(batch_size, -1, 512) # Reshape to[Batch_size, neg_samples, 512]
 
-        # Tokenise & encode negative image samples
-        neg_image_tensor = self.clip_processor(images=neg_images, return_tensors="pt")["pixel_values"] # [Batch_size,neg_samples, 3, 224, 224]
-        neg_image_embedding = self.clip_model.get_image_features(neg_image_tensor) # [Batch_size, neg_samples, 512]
+        # Tokenise & encode negative image samples- not needed as this is already done in the dataset
+        # neg_image_tensor = self.clip_processor(images=neg_images, return_tensors="pt")["pixel_values"] # [Batch_size,neg_samples, 3, 224, 224]
+        neg_images = neg_images.view(-1, 3, 224, 224) # [Batch_size*neg_samples, 3, 224, 224] --> CLIP encoder expects 4D input
+        neg_image_embedding = self.clip_model.get_image_features(pixel_values=neg_images) # [Batch_size, neg_samples, 512]
+        neg_image_embedding = neg_image_embedding.view(batch_size, -1, 512) # Reshape to[Batch_size, neg_samples, 512]
 
         # Pass through MLP towers
         query_embeddings = self.query_tower(query_embedding)  # [Batch_size, hidden_dim]

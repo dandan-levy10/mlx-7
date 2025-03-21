@@ -67,4 +67,4 @@ def train(num_epochs=10):
             print(f"Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item()}")
 
 if __name__ == "__main__":
-    train(3)
+    train(num_epochs=10)
