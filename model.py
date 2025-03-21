@@ -110,7 +110,7 @@ class NTXentLoss(nn.Module):
         batch_size = query_embeddings.size(0)
 
         # Compute similarities
-        pos_similarity = torch.nn.functional.cosine_similarity(query_embeddings, pos_embeddings) / self.temperature    # [Batch_size]
+        pos_similarity = torch.exp(torch.nn.functional.cosine_similarity(query_embeddings, pos_embeddings) / self.temperature)    # [Batch_size]
         # # Unsqueeze query_embeddings from [B, 512] to [B, 1, 512]
         neg_similarity = torch.exp(torch.matmul(query_embeddings.unsqueeze(1), neg_embeddings.transpose(1, 2)) / self.temperature)  # [Batch_size, num_negatives]
         # This gives a shape of [B, 1, neg_samples]; then squeeze it:
