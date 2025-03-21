@@ -170,18 +170,6 @@ class RecipeDataset(Dataset):
         return query_tokens, pos_tokens, pos_image, neg_tokens, neg_images # Returns a tuple of (text_input, image, negative_samples)
 
 
-# Example usage
-train_dataset = RecipeDataset(
-    json_file="processed-data/layer1_train_subset.json",
-    image_root="processed-data/train_images/val",
-    layer2_json="recipe-1m/layer2.json"
-)
-
-test_dataset = RecipeDataset(
-    json_file="processed-data/layer1_test_subset.json",
-    image_root="processed-data/test_images/val",
-    layer2_json="recipe-1m/layer2.json"
-)
 
 # Check dataset sample
 # text_sample, image_sample = train_dataset[100] if train_dataset is not None else None, None
@@ -189,6 +177,19 @@ test_dataset = RecipeDataset(
 # print(f"Image Shape: {image_sample.shape}")
 
 if __name__ == "__main__":
+
+    # Example usage
+    train_dataset = RecipeDataset(
+        json_file="processed-data/layer1_train_subset.json",
+        image_root="processed-data/train_images/val",
+        layer2_json="recipe-1m/layer2.json"
+    )
+
+    test_dataset = RecipeDataset(
+        json_file="processed-data/layer1_test_subset.json",
+        image_root="processed-data/test_images/val",
+        layer2_json="recipe-1m/layer2.json"
+    )
 
     # Print 5 random dataset samples
     for _ in range(1):

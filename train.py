@@ -18,10 +18,10 @@ def train(num_epochs=10):
         image_root="processed-data/train_images/val",
         layer2_json="recipe-1m/layer2.json",
         num_negatives=3
-    ), range(10))
+    ), range(20))
 
     # Create dataloader
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, drop_last=True)
 
     # Initialize CLIP model
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
@@ -64,7 +64,8 @@ def train(num_epochs=10):
             optimizer.step()
 
             # Print loss
-            print(f"Epoch {epoch}, Batch {batch_idx}, Loss: {loss.item()}")
+            if batch_idx % 4 == 0:
+                print(f"Epoch {epoch + 1}/{num_epochs}, Batch {batch_idx + 1}/{len(dataloader)}, Loss: {loss.item()}")
 
 if __name__ == "__main__":
     train(num_epochs=10)
